@@ -1,0 +1,26 @@
+<div class="width-limiter">
+
+<div id="main-content" class="section content">
+
+<div class="main-heading">
+
+<div class="rustdoc-breadcrumbs">
+
+[verus_builtin_macros](index.html)
+
+</div>
+
+# Macro <span class="macro">verus_ghost_inv_macro_exprs</span> Copy item path
+
+<span class="sub-heading"><a href="../src/verus_builtin_macros/lib.rs.html#297-300"
+class="src">Source</a> </span>
+
+</div>
+
+``` rust
+verus_ghost_inv_macro_exprs!() { /* proc-macro */ }
+```
+
+</div>
+
+</div>

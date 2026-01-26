@@ -1,0 +1,273 @@
+// Copyright 2022 VMware, Inc.
+// SPDX-License-Identifier: MIT
+use crate::kubernetes_api_objects::error::*;
+use crate::kubernetes_api_objects::spec::{
+    common::*, dynamic::*, label_selector::*, object_meta::*, persistent_volume_claim::*,
+    pod_template_spec::*, resource::*,
+};
+use crate::vstd_ext::string_view::*;
+use vstd::prelude::*;
+
+verus! {
+
+// StatefulSetView is the ghost type of StatefulSet.
+
+pub struct StatefulSetView {
+    pub metadata: ObjectMetaView,
+    pub spec: Option<StatefulSetSpecView>,
+    pub status: Option<StatefulSetStatusView>,
+}
+
+impl StatefulSetView {
+    pub open spec fn with_metadata(self, metadata: ObjectMetaView) -> StatefulSetView {
+        StatefulSetView {
+            metadata: metadata,
+            ..self
+        }
+    }
+
+    pub open spec fn with_spec(self, spec: StatefulSetSpecView) -> StatefulSetView {
+        StatefulSetView {
+            spec: Some(spec),
+            ..self
+        }
+    }
+
+    #[verifier(inline)]
+    pub open spec fn _state_validation(self) -> bool {
+        let new_spec = self.spec->0;
+        &&& self.spec is Some
+        &&& new_spec.replicas is Some ==> new_spec.replicas->0 >= 0
+        // &&& new_spec.pod_management_policy is Some
+        //     ==> (new_spec.pod_management_policy->0 == "OrderedReady"@
+        //         || new_spec.pod_management_policy->0 == "Parallel"@)
+        // &&& new_spec.persistent_volume_claim_retention_policy is Some
+        //     ==> new_spec.persistent_volume_claim_retention_policy->0.state_validation()
+    }
+
+    #[verifier(inline)]
+    pub open spec fn _transition_validation(self, old_obj: StatefulSetView) -> bool {
+        let old_spec = old_obj.spec->0;
+        let new_spec = self.spec->0;
+        // Fields other than replicas, template, persistent_volume_claim_retention_policy
+        // (and some other unspecified fields) are immutable.
+        &&& old_spec == StatefulSetSpecView {
+            replicas: old_spec.replicas,
+            template: old_spec.template,
+            persistent_volume_claim_retention_policy: old_spec.persistent_volume_claim_retention_policy,
+            ..new_spec
+        }
+    }
+}
+
+implement_resource_view_trait!(StatefulSetView, Option<StatefulSetSpecView>, None, Option<StatefulSetStatusView>, None,
+    Kind::StatefulSetKind, _state_validation, _transition_validation);
+
+pub struct StatefulSetSpecView {
+    pub min_ready_seconds: Option<int>,
+    pub ordinals: Option<StatefulSetOrdinalsView>,
+    pub persistent_volume_claim_retention_policy: Option<StatefulSetPersistentVolumeClaimRetentionPolicyView>,
+    pub pod_management_policy: Option<StringView>,
+    pub replicas: Option<int>,
+    pub revision_history_limit: Option<int>,
+    pub selector: LabelSelectorView,
+    pub service_name: StringView,
+    pub template: PodTemplateSpecView,
+    pub update_strategy: Option<StatefulSetUpdateStrategyView>,
+    pub volume_claim_templates: Option<Seq<PersistentVolumeClaimView>>,
+}
+
+impl StatefulSetSpecView {
+    pub open spec fn default() -> StatefulSetSpecView {
+        StatefulSetSpecView {
+            min_ready_seconds: None,
+            ordinals: None,
+            persistent_volume_claim_retention_policy: None,
+            pod_management_policy: None,
+            replicas: None,
+            revision_history_limit: None,
+            selector: LabelSelectorView::default(),
+            service_name: ""@,
+            template: PodTemplateSpecView::default(),
+            update_strategy: None,
+            volume_claim_templates: None,
+        }
+    }
+
+    pub open spec fn with_replicas(self, replicas: int) -> StatefulSetSpecView {
+        StatefulSetSpecView {
+            replicas: Some(replicas),
+            ..self
+        }
+    }
+
+    pub open spec fn with_selector(self, selector: LabelSelectorView) -> StatefulSetSpecView {
+        StatefulSetSpecView {
+            selector: selector,
+            ..self
+        }
+    }
+
+    pub open spec fn with_service_name(self, service_name: StringView) -> StatefulSetSpecView {
+        StatefulSetSpecView {
+            service_name: service_name,
+            ..self
+        }
+    }
+
+    pub open spec fn with_template(self, template: PodTemplateSpecView) -> StatefulSetSpecView {
+        StatefulSetSpecView {
+            template: template,
+            ..self
+        }
+    }
+
+    pub open spec fn with_volume_claim_templates(self, volume_claim_templates: Seq<PersistentVolumeClaimView>) -> StatefulSetSpecView {
+        StatefulSetSpecView {
+            volume_claim_templates: Some(volume_claim_templates),
+            ..self
+        }
+    }
+
+    pub open spec fn with_pod_management_policy(self, pod_management_policy: StringView) -> StatefulSetSpecView {
+        StatefulSetSpecView {
+            pod_management_policy: Some(pod_management_policy),
+            ..self
+        }
+    }
+
+    pub open spec fn with_pvc_retention_policy(self, pvc_retention_policy: StatefulSetPersistentVolumeClaimRetentionPolicyView) -> StatefulSetSpecView {
+        StatefulSetSpecView {
+            persistent_volume_claim_retention_policy: Some(pvc_retention_policy),
+            ..self
+        }
+    }
+
+    pub open spec fn without_pvc_retention_policy(self) -> StatefulSetSpecView {
+        StatefulSetSpecView {
+            persistent_volume_claim_retention_policy: None,
+            ..self
+        }
+    }
+}
+
+pub struct StatefulSetPersistentVolumeClaimRetentionPolicyView {
+    pub when_deleted: Option<StringView>,
+    pub when_scaled: Option<StringView>,
+}
+
+impl StatefulSetPersistentVolumeClaimRetentionPolicyView {
+    pub open spec fn default() -> StatefulSetPersistentVolumeClaimRetentionPolicyView {
+        StatefulSetPersistentVolumeClaimRetentionPolicyView {
+            when_deleted: None,
+            when_scaled: None,
+        }
+    }
+
+    pub open spec fn state_validation(self) -> bool {
+        &&& self.when_deleted is Some ==> (self.when_deleted->0 == "Retain"@ || self.when_deleted->0 == "Delete"@)
+        &&& self.when_scaled is Some ==> (self.when_scaled->0 == "Retain"@ || self.when_scaled->0 == "Delete"@)
+    }
+
+    pub open spec fn with_when_deleted(self, when_deleted: StringView) -> StatefulSetPersistentVolumeClaimRetentionPolicyView {
+        StatefulSetPersistentVolumeClaimRetentionPolicyView {
+            when_deleted: Some(when_deleted),
+            ..self
+        }
+    }
+
+    pub open spec fn with_when_scaled(self, when_scaled: StringView) -> StatefulSetPersistentVolumeClaimRetentionPolicyView {
+        StatefulSetPersistentVolumeClaimRetentionPolicyView {
+            when_scaled: Some(when_scaled),
+            ..self
+        }
+    }
+}
+
+pub struct StatefulSetOrdinalsView {
+    pub start: Option<int>
+}
+
+impl StatefulSetOrdinalsView {
+    pub open spec fn default() -> StatefulSetOrdinalsView {
+        StatefulSetOrdinalsView {
+            start: None,
+        }
+    }
+
+    pub open spec fn with_start(self, start: int) -> StatefulSetOrdinalsView {
+        StatefulSetOrdinalsView {
+            start: Some(start),
+            ..self
+        }
+    }
+}
+
+pub struct StatefulSetUpdateStrategyView {
+    pub type_: Option<StringView>,
+    pub rolling_update: Option<RollingUpdateStatefulSetStrategyView>,
+}
+
+impl StatefulSetUpdateStrategyView {
+    pub open spec fn default() -> StatefulSetUpdateStrategyView {
+        StatefulSetUpdateStrategyView {
+            type_: None,
+            rolling_update: None
+        }
+    }
+
+    pub open spec fn with_type(self, type_: StringView) -> StatefulSetUpdateStrategyView {
+        StatefulSetUpdateStrategyView {
+            type_: Some(type_),
+            ..self
+        }
+    }
+
+    pub open spec fn with_rolling_update(self, rolling_update: RollingUpdateStatefulSetStrategyView) -> StatefulSetUpdateStrategyView {
+        StatefulSetUpdateStrategyView {
+            rolling_update: Some(rolling_update),
+            ..self
+        }
+    }
+}
+
+pub struct RollingUpdateStatefulSetStrategyView {
+    pub partition: Option<int>,
+    pub max_unavailable: Option<int>
+}
+
+impl RollingUpdateStatefulSetStrategyView {
+    pub open spec fn default() -> RollingUpdateStatefulSetStrategyView {
+        RollingUpdateStatefulSetStrategyView {
+            partition: None,
+            max_unavailable: None
+        }
+    }
+    pub open spec fn with_partition(self, partition: int) -> RollingUpdateStatefulSetStrategyView {
+        RollingUpdateStatefulSetStrategyView {
+            partition: Some(partition),
+            ..self
+        }
+    }
+
+    pub open spec fn with_max_unavailable(self, max_unavailable: int) -> RollingUpdateStatefulSetStrategyView {
+        RollingUpdateStatefulSetStrategyView {
+            max_unavailable: Some(max_unavailable),
+            ..self
+        }
+    }
+}
+
+pub struct StatefulSetStatusView {
+    pub ready_replicas: Option<int>,
+}
+
+impl StatefulSetStatusView {
+    pub open spec fn default() -> StatefulSetStatusView {
+        StatefulSetStatusView {
+            ready_replicas: None,
+        }
+    }
+}
+
+}

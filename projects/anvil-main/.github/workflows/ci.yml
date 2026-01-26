@@ -1,0 +1,317 @@
+name: Continuous integration
+run-name: Continuous integration run by ${{ github.actor }}
+on:
+  # push:
+  #   branches:
+  #     - main
+  #   paths-ignore:
+  #     - "README.md"
+  #     - ".gitignore"
+  #     - "doc/**"
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+env:
+  verus_release: 0.2025.11.30.840fa61
+  kind_version: 0.23.0
+  go_version: "^1.20"
+  home_dir: /home/runner
+
+jobs:
+  setup-toolchain:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get HOME env variable
+        id: get-home
+        run: |
+          echo "home_dir=$HOME" >> $GITHUB_ENV
+          echo "home_dir=$HOME"
+      - name: Cache Verus
+        id: cache-verus
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.home_dir }}/verus
+            ${{ env.home_dir }}/.cargo
+            ${{ env.home_dir }}/.rustup
+          key: verus-${{ runner.os }}-${{ env.verus_release }}-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Download Rust if cache is missing
+        if: steps.cache-verus.outputs.cache-hit != 'true'
+        run: |
+          curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused -fsSL "https://sh.rustup.rs" | sh -s -- --default-toolchain none -y
+          . "$HOME/.cargo/env"
+          rustup toolchain install
+      - name: Download Verus if cache is missing
+        if: steps.cache-verus.outputs.cache-hit != 'true'
+        run: |
+          wget -q https://github.com/verus-lang/verus/releases/download/release%2F${{ env.verus_release }}/verus-${{ env.verus_release }}-x86-linux.zip
+          unzip verus-${{ env.verus_release }}-x86-linux.zip
+          rm verus-${{ env.verus_release }}-x86-linux.zip
+          mv verus-x86-linux $HOME/verus
+  vreplicaset-verification:
+    needs: setup-toolchain
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Verus cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.home_dir }}/verus
+            ${{ env.home_dir }}/.cargo
+            ${{ env.home_dir }}/.rustup
+          key: verus-${{ runner.os }}-${{ env.verus_release }}-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Verify vreplicaset controller
+        run: |
+          . "$HOME/.cargo/env"
+          export PATH="$PATH:$HOME/verus"
+          ./build.sh vreplicaset_controller.rs --rlimit 50 --time --verify-module vreplicaset_controller
+  vdeployment-verification:
+    needs: setup-toolchain
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Verus cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.home_dir }}/verus
+            ${{ env.home_dir }}/.cargo
+            ${{ env.home_dir }}/.rustup
+          key: verus-${{ runner.os }}-${{ env.verus_release }}-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Verify vdeployment controller
+        run: |
+          . "$HOME/.cargo/env"
+          export PATH="$PATH:$HOME/verus"
+          ./build.sh vdeployment_controller.rs --rlimit 50 --time --verify-module vdeployment_controller
+  vstatefulset-verification:
+    needs: setup-toolchain
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Verus cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.home_dir }}/verus
+            ${{ env.home_dir }}/.cargo
+            ${{ env.home_dir }}/.rustup
+          key: verus-${{ runner.os }}-${{ env.verus_release }}-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Verify vstatefulset controller
+        run: |
+          . "$HOME/.cargo/env"
+          export PATH="$PATH:$HOME/verus"
+          ./build.sh vstatefulset_controller.rs --rlimit 50 --time --verify-module vstatefulset_controller
+  esr-composition-verification:
+    needs: setup-toolchain
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Verus cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.home_dir }}/verus
+            ${{ env.home_dir }}/.cargo
+            ${{ env.home_dir }}/.rustup
+          key: verus-${{ runner.os }}-${{ env.verus_release }}-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Verify the ESR composition
+        run: |
+          . "$HOME/.cargo/env"
+          export PATH="$PATH:$HOME/verus"
+          ./build.sh esr_composition.rs --crate-type lib --rlimit 50 --time --verify-module composition
+  framework-verification:
+    needs: setup-toolchain
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Verus cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.home_dir }}/verus
+            ${{ env.home_dir }}/.cargo
+            ${{ env.home_dir }}/.rustup
+          key: verus-${{ runner.os }}-${{ env.verus_release }}-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Verify the Anvil framework
+        run: |
+          . "$HOME/.cargo/env"
+          export PATH="$PATH:$HOME/verus"
+          ./build.sh anvil.rs --crate-type lib --rlimit 50 --time
+  vreplicaset-admission-e2e-test:
+    needs:
+      - setup-toolchain
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Verus cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.home_dir }}/verus
+            ${{ env.home_dir }}/.cargo
+            ${{ env.home_dir }}/.rustup
+          key: verus-${{ runner.os }}-${{ env.verus_release }}-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.go_version }}
+      - name: Install kind
+        run: go install sigs.k8s.io/kind@v$kind_version
+      - name: Deploy vreplicaset admission controller
+        run: |
+          export PATH="$PATH:$HOME/verus"
+          ./local-test.sh vreplicaset-admission --build
+      - name: Run vreplicaset e2e tests for admission
+        run: . "$HOME/.cargo/env" && cd e2e && cargo run -- vreplicaset-admission
+        
+  # vstatefulset-admission-e2e-test:
+  #   needs:
+  #     - setup-toolchain
+  #   runs-on: ubuntu-24.04
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Restore Verus cache
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: |
+  #           ${{ env.home_dir }}/verus
+  #           ${{ env.home_dir }}/.cargo
+  #           ${{ env.home_dir }}/.rustup
+  #         key: verus-${{ runner.os }}-${{ env.verus_release }}-${{ hashFiles('rust-toolchain.toml') }}
+  #     - name: Setup Go
+  #       uses: actions/setup-go@v5
+  #       with:
+  #         go-version: ${{ env.go_version }}
+  #     - name: Install kind
+  #       run: go install sigs.k8s.io/kind@v$kind_version
+  #     - name: Deploy vstatefulset admission controller
+  #       run: |
+  #         export PATH="$PATH:$HOME/verus"
+  #         ./local-test.sh vstatefulset-admission --build
+  #     - name: Run vstatefulset e2e tests for admission
+  #       run: . "$HOME/.cargo/env" && cd e2e && cargo run -- vstatefulset-admission
+
+  vdeployment-admission-e2e-test:
+    needs:
+      - setup-toolchain
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Verus cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.home_dir }}/verus
+            ${{ env.home_dir }}/.cargo
+            ${{ env.home_dir }}/.rustup
+          key: verus-${{ runner.os }}-${{ env.verus_release }}-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.go_version }}
+      - name: Install kind
+        run: go install sigs.k8s.io/kind@v$kind_version
+      - name: Deploy vdeployment admission controller
+        run: |
+          export PATH="$PATH:$HOME/verus"
+          ./local-test.sh vdeployment-admission --build
+      - name: Run vdeployment e2e tests for admission
+        run: . "$HOME/.cargo/env" && cd e2e && cargo run -- vdeployment-admission
+  vreplicaset-e2e-test:
+    needs:
+      - setup-toolchain
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Verus cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.home_dir }}/verus
+            ${{ env.home_dir }}/.cargo
+            ${{ env.home_dir }}/.rustup
+          key: verus-${{ runner.os }}-${{ env.verus_release }}-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.go_version }}
+      - name: Install kind
+        run: go install sigs.k8s.io/kind@v$kind_version
+      - name: Deploy vreplicaset controller
+        run: |
+          export PATH="$PATH:$HOME/verus"
+          ./local-test.sh vreplicaset --build
+      - name: Run vreplicaset e2e tests
+        run: . "$HOME/.cargo/env" && cd e2e && cargo run -- vreplicaset
+  vdeployment-e2e-test:
+    needs:
+      - setup-toolchain
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Verus cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.home_dir }}/verus
+            ${{ env.home_dir }}/.cargo
+            ${{ env.home_dir }}/.rustup
+          key: verus-${{ runner.os }}-${{ env.verus_release }}-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "^1.20"
+      - name: Install kind
+        run: go install sigs.k8s.io/kind@v0.23.0
+      - name: Deploy vdeployment controller
+        run: |
+          export PATH="$PATH:$HOME/verus"
+          ./local-test.sh vdeployment --build
+      - name: Run vdeployment e2e tests
+        run: . "$HOME/.cargo/env" && cd e2e && cargo run -- vdeployment
+  vstatefulset-e2e-test:
+    needs:
+      - setup-toolchain
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Verus cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.home_dir }}/verus
+            ${{ env.home_dir }}/.cargo
+            ${{ env.home_dir }}/.rustup
+          key: verus-${{ runner.os }}-${{ env.verus_release }}-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "^1.20"
+      - name: Install kind
+        run: go install sigs.k8s.io/kind@v0.23.0
+      - name: Deploy vstatefulset controller
+        run: |
+          export PATH="$PATH:$HOME/verus"
+          ./local-test.sh vstatefulset --build
+      - name: Run vstatefulset e2e tests
+        run: . "$HOME/.cargo/env" && cd e2e && cargo run -- vstatefulset
+  tla-demo-verification:
+    needs: setup-toolchain
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore Verus cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env.home_dir }}/verus
+            ${{ env.home_dir }}/.cargo
+            ${{ env.home_dir }}/.rustup
+          key: verus-${{ runner.os }}-${{ env.verus_release }}-${{ hashFiles('rust-toolchain.toml') }}
+      - name: Verify the TLA demo
+        run: |
+          . "$HOME/.cargo/env"
+          export PATH="$PATH:$HOME/verus"
+          ./build.sh tla_demo.rs --crate-type lib --time

@@ -1,0 +1,53 @@
+// Copyright 2022 VMware, Inc.
+// SPDX-License-Identifier: MIT
+use crate::kubernetes_api_objects::exec::{object_meta::*, pod::*, resource::*};
+use crate::kubernetes_api_objects::spec::pod_template_spec::*;
+use vstd::prelude::*;
+
+verus! {
+
+implement_field_wrapper_type!(
+    PodTemplateSpec,
+    deps_hack::k8s_openapi::api::core::v1::PodTemplateSpec,
+    PodTemplateSpecView
+);
+
+implement_eq!(PodTemplateSpec);
+
+impl PodTemplateSpec {
+    #[verifier(external_body)]
+    pub fn metadata(&self) -> (metadata: Option<ObjectMeta>)
+        ensures self@.metadata == metadata.deep_view()
+    {
+        match &self.inner.metadata {
+            Some(m) => Some(ObjectMeta::from_kube(m.clone())),
+            None => None,
+        }
+    }
+
+    #[verifier(external_body)]
+    pub fn spec(&self) -> (spec: Option<PodSpec>)
+        ensures self@.spec == spec.deep_view()
+    {
+        match &self.inner.spec {
+            Some(s) => Some(PodSpec::from_kube(s.clone())),
+            None => None,
+        }
+    }
+
+    #[verifier(external_body)]
+    pub fn set_metadata(&mut self, metadata: ObjectMeta)
+        ensures self@ == old(self)@.with_metadata(metadata@),
+    {
+        self.inner.metadata = Some(metadata.into_kube());
+    }
+
+    #[verifier(external_body)]
+    pub fn set_spec(&mut self, spec: PodSpec)
+        ensures self@ == old(self)@.with_spec(spec@),
+    {
+        self.inner.spec = Some(spec.into_kube());
+    }
+}
+
+}
